@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Chat with Assistant</title>
+  <style>
+    body { font-family: sans-serif; padding: 20px; background: #f4f4f4; }
+    #chat { max-width: 600px; margin: auto; }
+    .msg { margin: 10px 0; }
+    .user { color: blue; }
+    .bot { color: green; }
+  </style>
+</head>
+<body>
+  <div id="chat">
+    <div class="msg bot">Assistant ready. Ask a question:</div>
+  </div>
+  <input type="text" id="input" placeholder="Type your question..." style="width: 100%; padding: 10px;" />
+  <script>
+    const API_KEY = "sk-...";
+    const ASSISTANT_ID = "asst_a4PTpKjzFREYXkJm3P4sBkXP";
+
+    const chatDiv = document.getElementById("chat");
+    const input = document.getElementById("input");
+
+    input.addEventListener("keydown", async (e) => {
+      if (e.key === "Enter") {
+        const userMsg = input.value;
+        if (!userMsg) return;
+        appendMessage("user", userMsg);
+        input.value = "";
+
+        const thread = await fetch("https://api.openai.com/v1/threads", {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "OpenAI-Beta": "assistants=v2",
+            "Content-Type": "application/json"
+          }
+        }).then(res => res.json());
+
+        await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "OpenAI-Beta": "assistants=v2",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            role: "user",
+            content: userMsg
+          })
+        });
+
+        const run = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "OpenAI-Beta": "assistants=v2",
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({ assistant_id: ASSISTANT_ID })
+        }).then(res => res.json());
+
+        let status = "queued";
+        while (status !== "completed") {
+          await new Promise(r => setTimeout(r, 1000));
+          const check = await fetch(`https://api.openai.com/v1/threads/${thread.id}/runs/${run.id}`, {
+            headers: {
+              Authorization: `Bearer ${API_KEY}`,
+              "OpenAI-Beta": "assistants=v2"
+            }
+          }).then(res => res.json());
+          status = check.status;
+        }
+
+        const messages = await fetch(`https://api.openai.com/v1/threads/${thread.id}/messages`, {
+          headers: {
+            Authorization: `Bearer ${API_KEY}`,
+            "OpenAI-Beta": "assistants=v2"
+          }
+        }).then(res => res.json());
+
+        const botMsg = messages.data.find(m => m.role === "assistant")?.content[0]?.text?.value;
+        appendMessage("bot", botMsg || "(No response)");
+      }
+    });
+
+    function appendMessage(sender, text) {
+      const div = document.createElement("div");
+      div.className = `msg ${sender}`;
+      div.textContent = `${sender === "user" ? "You" : "Assistant"}: ${text}`;
+      chatDiv.appendChild(div);
+    }
+  </script>
+</body>
+</html>
